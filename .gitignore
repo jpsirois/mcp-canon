@@ -1,0 +1,28 @@
+# Never commit user state or secrets
+.claude.json
+.claude.json.bak.*
+.credentials.json
+*credentials*
+*.token
+.copilot-cli-*-token
+.env
+.env.*
+*.local.json
+secrets/
+
+# User's resolved canonical file (only the .example.json belongs in git)
+canonical/mcp-canonical.json
+
+# Internal/team-specific seed lists must never enter this public repo.
+# Keep them in a sibling private dir (e.g. ../mcp-canon-internal) instead.
+canonical/internal/
+canonical/*.internal.*
+canonical/internal.*
+
+# OS / editor noise
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+node_modules/

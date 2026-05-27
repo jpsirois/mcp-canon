@@ -1,0 +1,98 @@
+#!/usr/bin/env bash
+# Manual reconciliation tool for ~/.claude.json MCP enable/disable state.
+#
+# Subcommands:
+#   status   - show canonical list and which projects diverge (default)
+#   promote  - copy current project's disabledMcpServers into canonical file
+#   sync     - overwrite every project's disabledMcpServers with canonical
+#
+# Reads canonical from ~/.claude/mcp-canonical.json (a symlink installed
+# by install.sh).
+
+set -euo pipefail
+
+CLAUDE_JSON="$HOME/.claude.json"
+CANONICAL_LINK="$HOME/.claude/mcp-canonical.json"
+
+die() {
+  echo "[mcp-sync] $*" >&2
+  exit 1
+}
+
+require_files() {
+  [[ -f "$CLAUDE_JSON" ]] || die "missing $CLAUDE_JSON"
+  [[ -e "$CANONICAL_LINK" ]] || die "missing $CANONICAL_LINK (run install.sh first)"
+  command -v jq >/dev/null || die "jq is required"
+}
+
+backup() {
+  local stamp
+  stamp="$(date +%Y%m%d-%H%M%S)"
+  cp "$CLAUDE_JSON" "$CLAUDE_JSON.bak.$stamp"
+  echo "backup: $CLAUDE_JSON.bak.$stamp"
+}
+
+current_cwd() {
+  echo "${CLAUDE_PROJECT_DIR:-$PWD}"
+}
+
+cmd_status() {
+  require_files
+  local canon
+  canon="$(jq -c '.disabledMcpServers' "$CANONICAL_LINK")"
+  echo "canonical ($CANONICAL_LINK):"
+  jq -r '.disabledMcpServers[]' "$CANONICAL_LINK" | sed 's/^/  - /'
+  echo
+  echo "diverging projects:"
+  jq -r --argjson canon "$canon" '
+    .projects
+    | to_entries[]
+    | select((.value.disabledMcpServers // []) | sort != ($canon | sort))
+    | "  - \(.key)  (has \((.value.disabledMcpServers // []) | length) entries)"
+  ' "$CLAUDE_JSON"
+}
+
+cmd_promote() {
+  require_files
+  local cwd
+  cwd="$(current_cwd)"
+  local entry_list
+  entry_list="$(jq --arg p "$cwd" '.projects[$p].disabledMcpServers // []' "$CLAUDE_JSON")"
+  if [[ "$entry_list" == "null" || "$entry_list" == "[]" ]]; then
+    die "current project ($cwd) has no disabledMcpServers to promote"
+  fi
+  local tmp
+  tmp="$(mktemp)"
+  jq --argjson list "$entry_list" '.disabledMcpServers = $list' "$CANONICAL_LINK" > "$tmp"
+  mv "$tmp" "$(readlink "$CANONICAL_LINK" 2>/dev/null || echo "$CANONICAL_LINK")"
+  echo "promoted $(echo "$entry_list" | jq 'length') entries from $cwd into canonical"
+}
+
+cmd_sync() {
+  require_files
+  backup
+  local canon
+  canon="$(jq -c '.disabledMcpServers' "$CANONICAL_LINK")"
+  local tmp
+  tmp="$(mktemp)"
+  jq --argjson canon "$canon" '
+    .projects |= with_entries(
+      .value.disabledMcpServers = $canon
+      | .value.enabledMcpjsonServers = []
+      | .value.disabledMcpjsonServers = []
+      | .value.mcpServers = {}
+    )
+  ' "$CLAUDE_JSON" > "$tmp"
+  mv "$tmp" "$CLAUDE_JSON"
+  local count
+  count="$(jq '.projects | length' "$CLAUDE_JSON")"
+  echo "synced $count project entries to canonical"
+}
+
+cmd="${1:-status}"
+case "$cmd" in
+  status)  cmd_status ;;
+  promote) cmd_promote ;;
+  sync)    cmd_sync ;;
+  *)       die "unknown command: $cmd  (use status | promote | sync)" ;;
+esac

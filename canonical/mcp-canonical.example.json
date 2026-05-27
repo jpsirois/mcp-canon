@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "note": "Source of truth for Claude Code MCP enable/disable. Servers listed here are DISABLED in every project that gets stamped by the hook or synced by /mcp-sync. Replace these placeholders with the MCP server names you want disabled (use the exact strings shown in Claude Code's /mcp UI).",
+  "disabledMcpServers": [
+    "claude.ai Asana",
+    "claude.ai Box"
+  ]
+}
