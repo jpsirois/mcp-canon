@@ -69,6 +69,7 @@ Manual operations (run from inside any Claude Code session):
 | `/mcp-sync status` | Show canonical list + which projects diverge |
 | `/mcp-sync promote` | Copy current project's `disabledMcpServers` → canonical |
 | `/mcp-sync sync` | Force every project entry's `disabledMcpServers` = canonical |
+| `/mcp-sync probe` | Wrap `claude mcp list` and group servers by health (connected / needs auth / failed). Diagnostic only — reconnect remains manual via `/mcp`. |
 
 Typical flow when you toggle a server in `/mcp`:
 

@@ -1,6 +1,6 @@
 ---
 name: mcp-sync
-description: Reconcile Claude Code MCP enable/disable state across all project entries in ~/.claude.json. Use when the user toggles an MCP server in /mcp and wants the change to apply everywhere, when they ask to "sync MCP", "promote MCP", "check MCP drift", or when a new project's MCP list looks wrong.
+description: Reconcile Claude Code MCP enable/disable state across all project entries in ~/.claude.json. Use when the user toggles an MCP server in /mcp and wants the change to apply everywhere, when they ask to "sync MCP", "promote MCP", "check MCP drift", "probe MCP", "which MCP servers are failing", or when a new project's MCP list looks wrong.
 ---
 
 # mcp-sync
@@ -26,6 +26,14 @@ Errors out if the current project's list is empty — refuse to clobber canonica
 Overwrite every project entry's `disabledMcpServers` with the canonical list. Also clears `disabledMcpjsonServers`, `enabledMcpjsonServers`, and `mcpServers` per-project overrides. Backs up `~/.claude.json` first.
 
 Use after `promote`, or to force-reset projects that have drifted.
+
+### `mcp-sync probe`
+
+Run `claude mcp list` and group servers by health status (`✓ Connected`, `! Needs authentication`, `✗ Failed`). Diagnostic only — does **not** reconnect anything. Use to find which servers need attention without scrolling the `/mcp` UI.
+
+Exits non-zero if any server is failed or needs authentication, so the command is safe to chain in scripts.
+
+Reconnect itself remains manual: open `/mcp` inside the live Claude Code session and use the per-server retry button, or fully exit and relaunch Claude Code if retry does not help (upstream bug for stdio and streamable-HTTP transports).
 
 ## Typical flow
 

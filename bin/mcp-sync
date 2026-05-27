@@ -5,6 +5,7 @@
 #   status   - show canonical list and which projects diverge (default)
 #   promote  - copy current project's disabledMcpServers into canonical file
 #   sync     - overwrite every project's disabledMcpServers with canonical
+#   probe    - run `claude mcp list` and group servers by health status
 #
 # Reads canonical from ~/.claude/mcp-canonical.json (a symlink installed
 # by install.sh).
@@ -89,10 +90,66 @@ cmd_sync() {
   echo "synced $count project entries to canonical"
 }
 
+cmd_probe() {
+  command -v claude >/dev/null || die "claude CLI is required"
+  echo "probing MCP servers via 'claude mcp list' ..."
+  local raw
+  if ! raw="$(claude mcp list 2>&1)"; then
+    echo "$raw" >&2
+    die "'claude mcp list' failed"
+  fi
+
+  # Recover the server name from a "claude mcp list" output line.
+  # Status portion is ` - ✓|!|✗ ...` anchored at the right.
+  # Name is everything up to the first ": " (server names may contain
+  # colons themselves, e.g. plugin:linear:linear, but never ": ").
+  extract_name() {
+    sed -E 's/ - [✓!✗].*$//; s/: .*$//' <<< "$1"
+  }
+
+  local connected=() needs_auth=() failed=() unknown=()
+  while IFS= read -r line; do
+    [[ "$line" == *' - '* ]] || continue
+    local name
+    name="$(extract_name "$line")"
+    case "$line" in
+      *' - ✓ Connected'*)               connected+=("$name") ;;
+      *' - ! Needs authentication'*)    needs_auth+=("$name") ;;
+      *' - ✗ Failed'*|*' - ✗ '*)        failed+=("$name") ;;
+      *)                                unknown+=("$line") ;;
+    esac
+  done <<< "$raw"
+
+  printf '\n'
+  printf '✓ %d connected\n' "${#connected[@]}"
+
+  if (( ${#needs_auth[@]} )); then
+    printf '! %d need authentication:\n' "${#needs_auth[@]}"
+    printf '    %s\n' "${needs_auth[@]}"
+  fi
+
+  if (( ${#failed[@]} )); then
+    printf '✗ %d failed:\n' "${#failed[@]}"
+    printf '    %s\n' "${failed[@]}"
+  fi
+
+  if (( ${#unknown[@]} )); then
+    printf '? %d with unrecognized status:\n' "${#unknown[@]}"
+    printf '    %s\n' "${unknown[@]}"
+  fi
+
+  if (( ${#failed[@]} + ${#needs_auth[@]} )); then
+    printf '\nNext step: run /mcp inside Claude Code and retry / re-authenticate the servers above.\n'
+    printf 'If retry does not help, fully exit Claude Code and relaunch (upstream bug for stdio + streamable-HTTP transports).\n'
+    exit 1
+  fi
+}
+
 cmd="${1:-status}"
 case "$cmd" in
   status)  cmd_status ;;
   promote) cmd_promote ;;
   sync)    cmd_sync ;;
-  *)       die "unknown command: $cmd  (use status | promote | sync)" ;;
+  probe)   cmd_probe ;;
+  *)       die "unknown command: $cmd  (use status | promote | sync | probe)" ;;
 esac
